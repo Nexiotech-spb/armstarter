@@ -261,6 +261,13 @@ const types = {
 };
 
 bindRange('voff','vVoff');
+// поправка для голоса сохраняется отдельно на каждом устройстве
+(function(){
+  const el=document.getElementById('voff');
+  const saved=localStorage.getItem('armVoff');
+  if(saved!=null){ el.value=saved; el.dispatchEvent(new Event('input')); }
+  el.addEventListener('input', e=>localStorage.setItem('armVoff', e.target.value));
+})();
 function readSig(){ cfg.signalMode = document.querySelector('input[name="sig"]:checked').value; }
 document.querySelectorAll('input[name="sig"]').forEach(r=>r.addEventListener('change', readSig));
 readSig();
