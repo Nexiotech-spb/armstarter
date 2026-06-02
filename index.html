@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ArmStarter — тренировка старта</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --accent:#2ea043; --accent2:#1f6feb; --danger:#f85149;
+    --warn:#d29922;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:640px; margin:0 auto; padding:12px;}
+  h1{font-size:18px; margin:4px 0 12px; letter-spacing:.3px;}
+  h1 span{color:var(--accent);}
+
+  .stage{position:relative; width:100%; aspect-ratio:4/3; background:#000;
+    border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    transform:scaleX(-1);} /* зеркало */
+  #overlay{position:absolute; inset:0; width:100%; height:100%;}
+  /* Большое слово команды поверх видео */
+  #word{position:absolute; inset:0; display:flex; align-items:center;
+    justify-content:center; text-align:center; font-weight:800;
+    font-size:14vw; text-shadow:0 2px 18px rgba(0,0,0,.85); pointer-events:none;
+    line-height:1; padding:8px;}
+  @media(min-width:640px){ #word{font-size:84px;} }
+  #word.go{color:#3fb950;}
+  #word.ready{color:#e6edf3;}
+  #word.false{color:var(--danger); font-size:9vw;}
+  @media(min-width:640px){ #word.false{font-size:56px;} }
+  #word.ms{color:#58a6ff;}
+
+  /* Полоска текущего движения */
+  .motionbar{position:absolute; left:8px; right:8px; bottom:8px; height:8px;
+    background:rgba(255,255,255,.12); border-radius:6px; overflow:hidden;}
+  .motionbar > i{display:block; height:100%; width:0%; background:var(--accent2);
+    transition:width .05s linear;}
+  .motionbar.armed > i{background:var(--warn);}
+
+  .row{display:flex; gap:10px; margin-top:12px;}
+  button{flex:1; font-size:18px; font-weight:700; padding:16px 10px; border:none;
+    border-radius:12px; color:#fff; cursor:pointer;}
+  #startBtn{background:var(--accent);}
+  #stopBtn{background:var(--danger);}
+  button:disabled{opacity:.4;}
+
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px;}
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:10px 6px; text-align:center;}
+  .stat b{display:block; font-size:22px;}
+  .stat small{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.4px;}
+  .stat.false b{color:var(--danger);}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:14px; margin-top:12px;}
+  .panel h2{font-size:14px; margin:0 0 10px; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.5px;}
+  .field{margin:10px 0;}
+  .field label{display:flex; justify-content:space-between; font-size:14px; margin-bottom:6px;}
+  .field label b{color:var(--accent2);}
+  input[type=range]{width:100%;}
+  .pair{display:flex; gap:10px;}
+  .pair > .field{flex:1; margin:6px 0;}
+  .checks{display:flex; flex-direction:column; gap:8px;}
+  .checks label{display:flex; align-items:center; gap:10px; font-size:15px;}
+  .checks input{width:20px; height:20px;}
+  .ctlrow{display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;}
+  .ctlrow button{flex:1; font-size:14px; padding:10px; background:#21262d;}
+  .hint{color:var(--muted); font-size:12px; line-height:1.5; margin-top:8px;}
+  .err{color:var(--danger); font-size:13px; margin-top:8px;}
+  details summary{cursor:pointer; color:var(--muted); font-size:13px; margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span>Arm</span>Starter — тренировка старта</h1>
+
+  <div class="stage">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
+    <div id="word"></div>
+    <div class="motionbar" id="mbar"><i></i></div>
+  </div>
+
+  <div class="row">
+    <button id="startBtn">▶ Старт</button>
+    <button id="stopBtn" disabled>■ Стоп</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b id="sLast">—</b><small>Реакция, мс</small></div>
+    <div class="stat"><b id="sAvg">—</b><small>Средняя</small></div>
+    <div class="stat"><b id="sBest">—</b><small>Лучшая</small></div>
+    <div class="stat false"><b id="sFalse">0</b><small>Фальстарт</small></div>
+  </div>
+  <div class="stats" style="grid-template-columns:1fr 1fr;">
+    <div class="stat"><b id="sReps">0</b><small>Повторов</small></div>
+    <div class="stat"><b id="sStatus">Готов</b><small>Статус</small></div>
+  </div>
+
+  <div id="err" class="err"></div>
+
+  <div class="panel">
+    <h2>График реакций (сессия)</h2>
+    <canvas id="chart" style="width:100%; height:200px; display:block;"></canvas>
+    <div class="hint" id="chartLegend">
+      <span style="color:#58a6ff;">●</span> реакция, мс &nbsp;·&nbsp;
+      <span style="color:#d29922;">▲</span> фальстарт &nbsp;·&nbsp;
+      <span style="color:#8b949e;">×</span> пропуск &nbsp;·&nbsp;
+      <span style="color:#3fb950;">– –</span> средняя
+    </div>
+    <div class="ctlrow"><button id="clearChartBtn">Очистить график</button></div>
+  </div>
+
+  <div class="panel">
+    <h2>Настройки</h2>
+
+    <div class="checks">
+      <label><input type="checkbox" id="tGo" checked> Команда «Go»</label>
+      <label><input type="checkbox" id="tReadyGo" checked> «Ready … пауза … Go»</label>
+      <label><input type="checkbox" id="tSlur" checked> «Ready-Go» (слитно)</label>
+    </div>
+
+    <div class="pair">
+      <div class="field">
+        <label>Пауза между повторами, мин <b id="vIrMin">4.0</b> с</label>
+        <input type="range" id="irMin" min="1" max="15" step="0.5" value="4">
+      </div>
+      <div class="field">
+        <label>макс <b id="vIrMax">10.0</b> с</label>
+        <input type="range" id="irMax" min="1" max="20" step="0.5" value="10">
+      </div>
+    </div>
+
+    <div class="pair">
+      <div class="field">
+        <label>Окно перед «Go», мин <b id="vHoldMin">0.5</b> с</label>
+        <input type="range" id="holdMin" min="0.2" max="4" step="0.1" value="0.5">
+      </div>
+      <div class="field">
+        <label>макс <b id="vHoldMax">3.0</b> с</label>
+        <input type="range" id="holdMax" min="0.3" max="6" step="0.1" value="3">
+      </div>
+    </div>
+    <div class="hint">«Окно перед Go» — случайная задержка, на которой нельзя дёргаться:
+      движение в это время = фальстарт. Чем шире диапазон, тем труднее угадать момент.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Камера и чувствительность</h2>
+    <div class="field">
+      <label>Чувствительность к движению <b id="vSens">средняя</b></label>
+      <input type="range" id="sens" min="1" max="100" step="1" value="55">
+    </div>
+    <div class="field">
+      <label>Размер зоны слежения (рамка) <b id="vRoi">60</b>%</label>
+      <input type="range" id="roi" min="20" max="100" step="5" value="60">
+    </div>
+    <div class="ctlrow">
+      <button id="flipBtn">⟳ Сменить камеру</button>
+      <button id="calBtn">Калибровать порог</button>
+    </div>
+    <div class="hint">Поставь руку внутрь рамки и держи неподвижно. Полоска снизу — текущее
+      движение; в покое она должна быть почти пустой. Нажми «Калибровать», держа руку
+      неподвижно ~1.5 с — порог подстроится автоматически.</div>
+  </div>
+
+  <details>
+    <summary>Как запускать (Mac / iPhone) и про точность</summary>
+    <div class="hint">
+      <b>Mac:</b> двойной клик по <code>start-mac.command</code> — откроется браузер с камерой.<br>
+      <b>iPhone:</b> камере нужен HTTPS. Размести <code>index.html</code> на GitHub Pages
+      (или открой через ngrok) и зайди по https-ссылке в Safari.<br><br>
+      <b>Точность:</b> отсчёт реакции упирается в частоту кадров камеры (~16–33 мс) и
+      небольшую задержку синтеза речи. Цифры стабильны и сравнимы между повторами,
+      но это не лабораторный таймер.
+    </div>
+  </details>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- Элементы ---------- */
+const video   = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const octx    = overlay.getContext('2d');
+const wordEl  = document.getElementById('word');
+const mbar    = document.getElementById('mbar');
+const mbarFill= mbar.querySelector('i');
+const errEl   = document.getElementById('err');
+
+const startBtn= document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const flipBtn = document.getElementById('flipBtn');
+const calBtn  = document.getElementById('calBtn');
+
+const S = { // статистические поля
+  last:document.getElementById('sLast'), avg:document.getElementById('sAvg'),
+  best:document.getElementById('sBest'), false:document.getElementById('sFalse'),
+  reps:document.getElementById('sReps'), status:document.getElementById('sStatus'),
+};
+
+/* ---------- Настройки (читаются из ползунков) ---------- */
+const cfg = {};
+function bindRange(id, valId, fmt){
+  const el = document.getElementById(id), out = document.getElementById(valId);
+  const upd = ()=>{ cfg[id] = parseFloat(el.value); if(out) out.textContent = fmt?fmt(el.value):el.value; };
+  el.addEventListener('input', upd); upd();
+}
+bindRange('irMin','vIrMin', v=>(+v).toFixed(1));
+bindRange('irMax','vIrMax', v=>(+v).toFixed(1));
+bindRange('holdMin','vHoldMin', v=>(+v).toFixed(1));
+bindRange('holdMax','vHoldMax', v=>(+v).toFixed(1));
+bindRange('roi','vRoi');
+bindRange('sens','vSens', v=>{ const n=+v; return n<34?'низкая':n<67?'средняя':'высокая'; });
+
+const types = {
+  go:      document.getElementById('tGo'),
+  readyGo: document.getElementById('tReadyGo'),
+  slur:    document.getElementById('tSlur'),
+};
+
+/* ---------- Камера ---------- */
+let stream=null, facing='user';
+const PW=192, PH=144;                 // размер кадра для обработки
+const work = document.createElement('canvas'); work.width=PW; work.height=PH;
+const wctx = work.getContext('2d', {willReadFrequently:true});
+let prevGray=null;
+let curMotion=0;                      // доля изменившихся пикселей в зоне (0..1)
+let baseline=0.004;                   // базовый шум (калибруется)
+
+async function initCamera(){
+  errEl.textContent='';
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:facing, width:{ideal:640}, height:{ideal:480},
+              frameRate:{ideal:60} }, audio:false });
+    video.srcObject = stream;
+    await video.play().catch(()=>{});
+    startFrameLoop();
+  }catch(e){
+    errEl.textContent = 'Камера недоступна: '+e.message+
+      '. На iPhone нужен HTTPS; на Mac — запуск через start-mac.command (localhost).';
+  }
+}
+
+flipBtn.addEventListener('click', ()=>{ facing = facing==='user'?'environment':'user'; initCamera(); });
+
+/* ---------- Цикл обработки кадров (motion-детекция) ---------- */
+let frameScheduled=false;
+function startFrameLoop(){
+  if(frameScheduled) return; frameScheduled=true;
+  const useRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+  const tick = ()=>{
+    processFrame();
+    if(useRVFC) video.requestVideoFrameCallback(tick);
+    else requestAnimationFrame(tick);
+  };
+  if(useRVFC) video.requestVideoFrameCallback(tick); else requestAnimationFrame(tick);
+}
+
+function roiBounds(){
+  const f = (cfg.roi||60)/100;
+  const w = Math.round(PW*f), h = Math.round(PH*f);
+  const x = Math.round((PW-w)/2), y = Math.round((PH-h)/2);
+  return {x,y,w,h};
+}
+
+function processFrame(){
+  if(video.readyState < 2) return;
+  wctx.drawImage(video, 0,0, PW,PH);
+  let img;
+  try{ img = wctx.getImageData(0,0,PW,PH); }catch(e){ return; }
+  const d = img.data;
+  const {x,y,w,h} = roiBounds();
+  const gray = new Float32Array(PW*PH);
+  let changed=0, total=0;
+  const pixThresh = 22;               // порог разницы яркости на пиксель
+  for(let j=y; j<y+h; j++){
+    for(let i=x; i<x+w; i++){
+      const p=(j*PW+i); const o=p*4;
+      const g = (d[o]*0.299 + d[o+1]*0.587 + d[o+2]*0.114);
+      gray[p]=g;
+      if(prevGray){
+        if(Math.abs(g - prevGray[p]) > pixThresh) changed++;
+        total++;
+      }
+    }
+  }
+  // сохранить серую карту целиком для следующего сравнения
+  if(!prevGray) prevGray = gray;
+  else { for(let j=y;j<y+h;j++) for(let i=x;i<x+w;i++){ const p=j*PW+i; prevGray[p]=gray[p]; } }
+
+  curMotion = total ? changed/total : 0;
+
+  drawOverlay(curMotion);
+}
+
+// Порог срабатывания зависит от чувствительности и базового шума
+function motionThreshold(){
+  const sens = (cfg.sens||55)/100;          // 0..1
+  // высокая чувствительность -> низкий порог
+  const span = 0.06;                         // верхняя граница порога
+  const t = baseline + span*(1-sens);
+  return Math.max(baseline*1.8, t);
+}
+function isMoving(){ return curMotion > motionThreshold(); }
+
+/* ---------- Отрисовка рамки и полоски ---------- */
+function drawOverlay(motion){
+  if(overlay.width!==overlay.clientWidth){ overlay.width=overlay.clientWidth; overlay.height=overlay.clientHeight; }
+  const W=overlay.width, H=overlay.height;
+  octx.clearRect(0,0,W,H);
+  const f=(cfg.roi||60)/100;
+  const w=W*f, h=H*f, x=(W-w)/2, yb=(H-h)/2;
+  octx.lineWidth=2; octx.strokeStyle='rgba(46,160,67,.8)';
+  octx.setLineDash([8,6]); octx.strokeRect(x,yb,w,h); octx.setLineDash([]);
+  // полоска движения относительно порога
+  const ratio = Math.min(1, motion/(motionThreshold()*2));
+  mbarFill.style.width = (ratio*100).toFixed(0)+'%';
+}
+
+/* ---------- Калибровка порога шума ---------- */
+calBtn.addEventListener('click', async ()=>{
+  if(!stream){ await initCamera(); }
+  calBtn.textContent='Замер…'; let mx=0, n=0;
+  const t0=performance.now();
+  await new Promise(res=>{
+    const iv=setInterval(()=>{
+      mx=Math.max(mx,curMotion); n++;
+      if(performance.now()-t0>1500){ clearInterval(iv); res(); }
+    },30);
+  });
+  baseline = Math.max(0.002, mx*1.3);
+  calBtn.textContent='Готово ✓';
+  setTimeout(()=>calBtn.textContent='Калибровать порог',1200);
+});
+
+/* ---------- Синтез речи ---------- */
+let voice=null;
+function pickVoice(){
+  const vs = speechSynthesis.getVoices();
+  voice = vs.find(v=>/en[-_]US/i.test(v.lang)) || vs.find(v=>/^en/i.test(v.lang)) || vs[0] || null;
+}
+if('speechSynthesis' in window){
+  pickVoice();
+  speechSynthesis.onvoiceschanged = pickVoice;
+}
+// Говорит фразу; onStart вызывается в момент начала озвучки
+function speak(text, {rate=1, onStart}={}){
+  return new Promise(resolve=>{
+    if(!('speechSynthesis' in window)){ if(onStart) onStart(performance.now()); return resolve(); }
+    const u = new SpeechSynthesisUtterance(text);
+    if(voice) u.voice=voice;
+    u.lang='en-US'; u.rate=rate; u.pitch=1; u.volume=1;
+    let started=false;
+    u.onstart=()=>{ started=true; if(onStart) onStart(performance.now()); };
+    u.onend=()=>resolve();
+    u.onerror=()=>{ if(!started && onStart) onStart(performance.now()); resolve(); };
+    speechSynthesis.speak(u);
+    // страховка, если onstart не пришёл (некоторые движки)
+    setTimeout(()=>{ if(!started && onStart){ started=true; onStart(performance.now()); } }, 120);
+  });
+}
+
+/* ---------- Машина состояний тренировки ---------- */
+let running=false, abortRep=false;
+let reps=0, falses=0, sum=0, count=0, best=Infinity;
+
+const rnd = (a,b)=> a + Math.random()*(b-a);
+const sleep = ms=> new Promise(r=>setTimeout(r,ms));
+
+function setWord(text, cls){ wordEl.textContent=text||''; wordEl.className=cls||''; }
+function setStatus(t){ S.status.textContent=t; }
+
+// Ждём первое движение в зоне после момента t0; либо фальстарт во время holdMs
+async function waitMotion(maxMs){
+  const t0=performance.now();
+  return new Promise(resolve=>{
+    const iv=setInterval(()=>{
+      if(!running){ clearInterval(iv); resolve(null); return; }
+      if(isMoving()){ clearInterval(iv); resolve(performance.now()); return; }
+      if(performance.now()-t0>maxMs){ clearInterval(iv); resolve(null); return; }
+    },4);
+  });
+}
+// Следим за фальстартом в течение holdMs; true если дёрнулся раньше
+async function watchFalseStart(holdMs){
+  const t0=performance.now();
+  return new Promise(resolve=>{
+    const iv=setInterval(()=>{
+      if(!running){ clearInterval(iv); resolve('stop'); return; }
+      if(isMoving()){ clearInterval(iv); resolve(true); return; }
+      if(performance.now()-t0>=holdMs){ clearInterval(iv); resolve(false); return; }
+    },4);
+  });
+}
+
+function chosenTypes(){
+  const list=[];
+  if(types.go.checked) list.push('go');
+  if(types.readyGo.checked) list.push('readyGo');
+  if(types.slur.checked) list.push('slur');
+  return list;
+}
+
+const sessionLog=[];                 // {kind:'ok'|'false'|'miss', ms?}
+function recordReaction(ms){
+  reps++; count++; sum+=ms; best=Math.min(best,ms);
+  S.last.textContent=Math.round(ms); S.last.parentElement.querySelector('b').className='ms';
+  S.avg.textContent=Math.round(sum/count);
+  S.best.textContent=Math.round(best);
+  S.reps.textContent=reps;
+  sessionLog.push({kind:'ok', ms}); drawChart();
+}
+function recordFalse(){
+  reps++; falses++; S.false.textContent=falses; S.reps.textContent=reps;
+  sessionLog.push({kind:'false'}); drawChart();
+}
+function recordMiss(){
+  sessionLog.push({kind:'miss'}); drawChart();
+}
+
+/* ---------- График реакций ---------- */
+const chart=document.getElementById('chart');
+const cctx=chart.getContext('2d');
+document.getElementById('clearChartBtn').addEventListener('click', ()=>{ sessionLog.length=0; drawChart(); });
+window.addEventListener('resize', drawChart);
+
+function drawChart(){
+  const dpr=window.devicePixelRatio||1;
+  const cssW=chart.clientWidth||300, cssH=chart.clientHeight||200;
+  chart.width=cssW*dpr; chart.height=cssH*dpr;
+  cctx.setTransform(dpr,0,0,dpr,0,0);
+  cctx.clearRect(0,0,cssW,cssH);
+
+  const padL=40, padR=10, padT=12, padB=20;
+  const W=cssW-padL-padR, H=cssH-padT-padB;
+
+  const oks=sessionLog.filter(e=>e.kind==='ok');
+  const maxMs=Math.max(400, ...oks.map(e=>e.ms));
+  const yMax=Math.ceil(maxMs/100)*100;
+  const n=Math.max(sessionLog.length,1);
+
+  const X=i=> padL + (n===1? W/2 : (i/(n-1))*W);
+  const Y=ms=> padT + H - (ms/yMax)*H;
+
+  // сетка и подписи Y
+  cctx.font='11px -apple-system,sans-serif'; cctx.textBaseline='middle';
+  for(let g=0; g<=yMax; g+=Math.max(100, Math.round(yMax/5/100)*100)){
+    const y=Y(g);
+    cctx.strokeStyle='rgba(255,255,255,.08)'; cctx.beginPath();
+    cctx.moveTo(padL,y); cctx.lineTo(padL+W,y); cctx.stroke();
+    cctx.fillStyle='#8b949e'; cctx.textAlign='right'; cctx.fillText(g, padL-6, y);
+  }
+
+  if(!oks.length && !sessionLog.length){
+    cctx.fillStyle='#8b949e'; cctx.textAlign='center'; cctx.textBaseline='middle';
+    cctx.fillText('Нет данных — начни тренировку', padL+W/2, padT+H/2);
+    return;
+  }
+
+  // средняя линия
+  if(oks.length){
+    const avg=oks.reduce((s,e)=>s+e.ms,0)/oks.length;
+    const ay=Y(avg);
+    cctx.strokeStyle='#3fb950'; cctx.setLineDash([6,5]); cctx.beginPath();
+    cctx.moveTo(padL,ay); cctx.lineTo(padL+W,ay); cctx.stroke(); cctx.setLineDash([]);
+  }
+
+  // линия по точкам реакции
+  cctx.strokeStyle='rgba(88,166,255,.6)'; cctx.lineWidth=2; cctx.beginPath();
+  let first=true;
+  sessionLog.forEach((e,i)=>{
+    if(e.kind!=='ok') return;
+    const x=X(i), y=Y(e.ms);
+    if(first){ cctx.moveTo(x,y); first=false; } else cctx.lineTo(x,y);
+  });
+  cctx.stroke();
+
+  // маркеры
+  sessionLog.forEach((e,i)=>{
+    const x=X(i);
+    if(e.kind==='ok'){
+      const y=Y(e.ms);
+      cctx.fillStyle='#58a6ff'; cctx.beginPath(); cctx.arc(x,y,3.5,0,7); cctx.fill();
+    } else if(e.kind==='false'){
+      const y=padT+H-6;
+      cctx.fillStyle='#d29922'; cctx.beginPath();
+      cctx.moveTo(x,y-7); cctx.lineTo(x-6,y+4); cctx.lineTo(x+6,y+4); cctx.closePath(); cctx.fill();
+    } else { // miss
+      const y=padT+H-6;
+      cctx.strokeStyle='#8b949e'; cctx.lineWidth=2; cctx.beginPath();
+      cctx.moveTo(x-5,y-5); cctx.lineTo(x+5,y+5); cctx.moveTo(x+5,y-5); cctx.lineTo(x-5,y+5); cctx.stroke();
+    }
+  });
+}
+
+async function runRep(){
+  const list = chosenTypes();
+  if(!list.length){ errEl.textContent='Выбери хотя бы один тип команды.'; stopTraining(); return; }
+  const type = list[Math.floor(Math.random()*list.length)];
+
+  // 1) Пауза между повторами — встаём в позицию
+  setWord('', ''); setStatus('Приготовься');
+  await sleep(rnd(cfg.irMin, cfg.irMax)*1000);
+  if(!running) return;
+
+  // 2) Окно перед Go: следим за фальстартом
+  const holdMs = rnd(cfg.holdMin, cfg.holdMax)*1000;
+  mbar.classList.add('armed');
+
+  if(type==='readyGo'){
+    setWord('READY','ready'); setStatus('Ready');
+    await speak('Ready');
+    if(!running){ mbar.classList.remove('armed'); return; }
+  } else {
+    setStatus('Замри'); setWord('•','ready');
+  }
+
+  const fs = await watchFalseStart(holdMs);
+  mbar.classList.remove('armed');
+  if(fs==='stop') return;
+  if(fs===true){
+    setWord('ФАЛЬСТАРТ','false'); setStatus('Фальстарт'); recordFalse();
+    speak('False start');
+    await sleep(1400);
+    return;
+  }
+
+  // 3) Команда GO — засекаем t0 в момент начала озвучки
+  let t0=null;
+  setStatus('Реагируй!');
+  if(type==='slur'){
+    speak('Ready go', {rate:1.5, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+  } else {
+    speak('Go', {onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+  }
+  // ждём t0 (момент звука)
+  while(t0===null && running){ await sleep(4); }
+  if(!running) return;
+
+  // 4) Ждём движение руки
+  const t1 = await waitMotion(2500);
+  if(!running) return;
+  if(t1===null){
+    setWord('— нет реакции','ready'); setStatus('Пропуск'); recordMiss();
+    await sleep(1200);
+    return;
+  }
+  const ms = t1 - t0;
+  recordReaction(ms);
+  setWord(Math.round(ms)+' мс','ms'); setStatus('Реакция: '+Math.round(ms));
+  await sleep(1300);
+}
+
+async function loop(){
+  while(running){
+    await runRep();
+    if(!running) break;
+  }
+}
+
+/* ---------- Старт / Стоп ---------- */
+async function startTraining(){
+  errEl.textContent='';
+  if(!stream){ await initCamera(); if(!stream) return; }
+  // разблокировать синтез речи жестом пользователя (важно для iOS)
+  speak(' ', {rate:1});
+  pickVoice();
+  // новый заход — обнуляем сессию и график
+  reps=0; falses=0; sum=0; count=0; best=Infinity; sessionLog.length=0;
+  S.last.textContent='—'; S.avg.textContent='—'; S.best.textContent='—';
+  S.false.textContent='0'; S.reps.textContent='0'; drawChart();
+  running=true; startBtn.disabled=true; stopBtn.disabled=false;
+  setStatus('Старт');
+  loop();
+}
+function stopTraining(){
+  running=false; startBtn.disabled=false; stopBtn.disabled=true;
+  mbar.classList.remove('armed');
+  if('speechSynthesis' in window) speechSynthesis.cancel();
+  setWord('',''); setStatus('Стоп');
+}
+
+startBtn.addEventListener('click', startTraining);
+stopBtn.addEventListener('click', stopTraining);
+
+/* запросим камеру сразу, чтобы видеть превью (на iOS включится после жеста/HTTPS) */
+window.addEventListener('load', ()=>{ drawChart(); initCamera(); });
+</script>
+</body>
+</html>
