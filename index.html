@@ -618,8 +618,8 @@ async function runRep(){
     t0 = await goBeep();          // точный момент звука, ждём до него внутри
     setWord('GO!','go');
   } else if(type==='slur'){
-    // «редиго» слитно — одна фраза без зазора
-    speak('Ready go', {rate:1.25, pitch:1.1, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+    // «редиго» слитно — одна фраза без зазора, быстрее (чтобы «Ready» проскакивал)
+    speak('Ready go', {rate:1.6, pitch:1.1, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
   } else {
     speak('Go', {rate:1.25, onStart:(t)=>{ t0=t; setWord('GO!','go'); }}); // резко, как в «редиго»
   }
