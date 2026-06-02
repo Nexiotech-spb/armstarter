@@ -267,6 +267,7 @@ const wctx = work.getContext('2d', {willReadFrequently:true});
 let prevGray=null;
 let curMotion=0;                      // доля изменившихся пикселей в зоне (0..1)
 let baseline=0.004;                   // базовый шум (калибруется)
+let camLatency=null;                  // задержка камеры по таймстампам кадров (мс), если доступна
 
 async function initCamera(){
   errEl.textContent='';
@@ -291,7 +292,10 @@ let frameScheduled=false;
 function startFrameLoop(){
   if(frameScheduled) return; frameScheduled=true;
   const useRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
-  const tick = ()=>{
+  const tick = (now, metadata)=>{
+    if(metadata && typeof metadata.captureTime==='number'){
+      camLatency = performance.now() - metadata.captureTime; // задержка захвата кадра
+    }
     processFrame();
     if(useRVFC) video.requestVideoFrameCallback(tick);
     else requestAnimationFrame(tick);
@@ -683,35 +687,56 @@ const latBtn = document.getElementById('latBtn');
 const latOut = document.getElementById('latOut');
 let testing=false;
 
+// Ждём резкий скачок яркости (вспышку). Низкий фикс. порог — не зависит от настройки чувствительности.
+async function waitFlash(maxMs){
+  const t0=performance.now(); let peak=0;
+  return new Promise(resolve=>{
+    const iv=setInterval(()=>{
+      if(!testing){ clearInterval(iv); resolve({t:null,peak}); return; }
+      if(curMotion>peak) peak=curMotion;
+      if(curMotion>0.03){ clearInterval(iv); resolve({t:performance.now(),peak}); return; }
+      if(performance.now()-t0>maxMs){ clearInterval(iv); resolve({t:null,peak}); return; }
+    },4);
+  });
+}
+
 async function runLatencyTest(){
   if(running || testing) return;
   if(!stream){ await initCamera(); if(!stream) return; }
   ensureAudio();
   testing=true; latBtn.disabled=true; startBtn.disabled=true;
-  const rounds=6, res=[];
+  latOut.textContent='Тест идёт…';
+  const rounds=6, res=[]; let peakMax=0;
   for(let r=0; r<rounds && testing; r++){
     setWord('Тест '+(r+1)+'/'+rounds,'tip'); setStatus('Авто-тест');
     await sleep(700 + Math.random()*1200);
     if(!testing) break;
-    const t0 = await goBeep();            // точный момент бипа
-    flash.classList.add('on');           // вспышка экрана = световой сигнал для камеры
-    const t1 = await waitMotion(1000);   // камера ловит вспышку
+    const t0 = await goBeep();              // точный момент бипа
+    flash.classList.add('on');             // вспышка экрана = световой сигнал для камеры
+    const {t:t1, peak} = await waitFlash(900);
     flash.classList.remove('on');
+    peakMax=Math.max(peakMax, peak);
     if(t1!==null){ res.push(t1 - t0); setWord(Math.round(t1 - t0)+' мс','ms'); }
-    else { setWord('—','ready'); }
+    else { setWord('не видно','tip'); }
     await sleep(700);
   }
   flash.classList.remove('on');
   testing=false; latBtn.disabled=false; startBtn.disabled=false;
-  setWord('',''); setStatus('Готов');
+  setStatus('Готов');
+
+  const camTxt = (camLatency!=null) ? ' · по таймстампам камеры ≈ '+Math.round(camLatency)+' мс' : '';
   if(res.length){
     const avg = res.reduce((a,b)=>a+b,0)/res.length;
     const mn  = Math.min(...res);
-    latOut.innerHTML = 'Задержка системы (камера + обработка): <b>'+Math.round(avg)+
-      ' мс</b> · мин '+Math.round(mn)+' · замеров '+res.length+
-      '. Это «пол» — вычти из своих результатов, чтобы оценить чистую реакцию.';
+    setWord('Пол ≈ '+Math.round(avg)+' мс','ms');     // крупно и остаётся на экране
+    latOut.innerHTML = '<b style="color:#58a6ff;font-size:16px;">Задержка системы ≈ '+
+      Math.round(avg)+' мс</b> (мин '+Math.round(mn)+', замеров '+res.length+')'+camTxt+
+      '.<br>Это «пол» — вычти из своих результатов: чистая реакция ≈ замер − '+Math.round(avg)+' мс.';
   } else {
-    latOut.textContent = 'Вспышку поймать не удалось — затемни помещение (или направь камеру к экрану) и повтори.';
+    setWord('вспышка слабая','tip');
+    latOut.innerHTML = 'Вспышку поймать не удалось (пик яркости '+peakMax.toFixed(3)+
+      ', нужно >0.03)'+camTxt+'. Сильно затемни комнату или на время теста направь камеру '+
+      'к экрану и повтори.';
   }
 }
 latBtn.addEventListener('click', runLatencyTest);
