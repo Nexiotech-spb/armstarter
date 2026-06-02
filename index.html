@@ -574,22 +574,37 @@ async function runRep(){
   await sleep(rnd(cfg.irMin, cfg.irMax)*1000);
   if(!running) return;
 
-  // 2) Окно перед Go: следим за фальстартом
+  // 2) Окно перед Go: сторож фальстарта активен с этого момента — включая само слово «Ready»
   const holdMs = rnd(cfg.holdMin, cfg.holdMax)*1000;
   mbar.classList.add('armed');
 
+  let falseStart=false, watching=true;
+  (async ()=>{                                   // непрерывная слежка до команды GO
+    while(watching && running){
+      if(isMoving()){
+        falseStart=true; watching=false;
+        if('speechSynthesis' in window) speechSynthesis.cancel(); // оборвать «Ready», если дёрнулся на нём
+        break;
+      }
+      await sleep(4);
+    }
+  })();
+
   if(type==='readyGo'){
     setWord('READY','ready'); setStatus('Ready');
-    await speak('Ready');
-    if(!running){ mbar.classList.remove('armed'); return; }
+    await speak('Ready');                         // сторож уже следит во время «Ready»
+    if(!running){ watching=false; mbar.classList.remove('armed'); return; }
   } else {
     setStatus('Замри'); setWord('•','ready');
   }
 
-  const fs = await watchFalseStart(holdMs);
+  // случайная выдержка перед GO (сторож продолжает следить)
+  const tHold=performance.now();
+  while(performance.now()-tHold < holdMs && !falseStart && running){ await sleep(4); }
+  watching=false;
   mbar.classList.remove('armed');
-  if(fs==='stop') return;
-  if(fs===true){
+  if(!running) return;
+  if(falseStart){
     setWord('ФАЛЬСТАРТ','false'); setStatus('Фальстарт'); recordFalse();
     speak('False start');
     await sleep(1400);
