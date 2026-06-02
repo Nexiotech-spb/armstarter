@@ -619,7 +619,7 @@ async function runRep(){
     setWord('GO!','go');
   } else if(type==='slur'){
     // «редиго» слитно — одна фраза без зазора, быстрее (чтобы «Ready» проскакивал)
-    speak('Ready go', {rate:1.6, pitch:1.1, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+    speak('Ready go', {rate:1.4, pitch:1.1, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
   } else {
     speak('Go', {rate:1.25, onStart:(t)=>{ t0=t; setWord('GO!','go'); }}); // резко, как в «редиго»
   }
