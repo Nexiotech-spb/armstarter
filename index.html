@@ -198,6 +198,7 @@
       Вычитать задержку системы: <b id="floorVal" style="color:var(--accent2);">0</b> мс
     </label>
     <div class="ctlrow"><button id="resetFloorBtn">Сбросить задержку</button></div>
+    <div class="hint" id="floorStatus"></div>
     <div class="hint">Поставь руку внутрь рамки и держи неподвижно. Полоска снизу — текущее
       движение; в покое она должна быть почти пустой. Нажми «Калибровать», держа руку
       неподвижно ~1.5 с — порог подстроится автоматически.</div>
@@ -699,7 +700,17 @@ let sysFloor = parseFloat(localStorage.getItem('armSysFloor')||'0') || 0;
 const subFloor = document.getElementById('subFloor');
 const floorVal = document.getElementById('floorVal');
 const resetFloorBtn = document.getElementById('resetFloorBtn');
-function updateFloorUI(){ floorVal.textContent = Math.round(sysFloor); }
+const floorStatus = document.getElementById('floorStatus');
+function updateFloorUI(){
+  floorVal.textContent = Math.round(sysFloor);
+  if(sysFloor>0){
+    floorStatus.innerHTML = '✅ Это устройство откалибровано: <b>'+Math.round(sysFloor)+
+      ' мс</b>. Перекалибруй при смене камеры или освещения.';
+  } else {
+    floorStatus.innerHTML = '⚠️ Это устройство не откалибровано — запусти 🧪 Авто-тест один раз '+
+      '(калибровка хранится отдельно для каждого устройства).';
+  }
+}
 function setFloor(ms){
   sysFloor = Math.max(0, Math.round(ms));
   localStorage.setItem('armSysFloor', sysFloor);
