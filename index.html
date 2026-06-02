@@ -739,30 +739,39 @@ const latBtn = document.getElementById('latBtn');
 const latOut = document.getElementById('latOut');
 let testing=false;
 
-/* «Пол» системы (задержка камеры+обработки), вычитается из замеров */
-let sysFloor = parseFloat(localStorage.getItem('armSysFloor')||'0') || 0;
+/* «Пол» системы (задержка камеры+обработки), вычитается из замеров.
+   По умолчанию 120 мс на любом устройстве (даже без авто-теста); авто-тест уточняет под устройство. */
+const DEFAULT_FLOOR = 120;
+let sysFloor = parseFloat(localStorage.getItem('armSysFloor'));
+let floorCalibrated = !isNaN(sysFloor);
+if(!floorCalibrated) sysFloor = DEFAULT_FLOOR;
 const subFloor = document.getElementById('subFloor');
 const floorVal = document.getElementById('floorVal');
 const resetFloorBtn = document.getElementById('resetFloorBtn');
 const floorStatus = document.getElementById('floorStatus');
 function updateFloorUI(){
   floorVal.textContent = Math.round(sysFloor);
-  if(sysFloor>0){
+  if(floorCalibrated){
     floorStatus.innerHTML = '✅ Это устройство откалибровано: <b>'+Math.round(sysFloor)+
       ' мс</b>. Перекалибруй при смене камеры или освещения.';
   } else {
-    floorStatus.innerHTML = '⚠️ Это устройство не откалибровано — запусти 🧪 Авто-тест один раз '+
-      '(калибровка хранится отдельно для каждого устройства).';
+    floorStatus.innerHTML = 'ℹ️ Поправка по умолчанию <b>'+Math.round(sysFloor)+
+      ' мс</b> применяется сразу. Для точности под своё устройство запусти 🧪 Авто-тест.';
   }
 }
 function setFloor(ms){
   sysFloor = Math.max(0, Math.round(ms));
+  floorCalibrated = true;
   localStorage.setItem('armSysFloor', sysFloor);
   subFloor.checked = sysFloor>0;
   updateFloorUI();
 }
 subFloor.checked = sysFloor>0; updateFloorUI();
-resetFloorBtn.addEventListener('click', ()=>{ setFloor(0); subFloor.checked=false; });
+resetFloorBtn.addEventListener('click', ()=>{   // сброс калибровки → снова дефолт 120, но всё ещё применяется
+  localStorage.removeItem('armSysFloor');
+  sysFloor = DEFAULT_FLOOR; floorCalibrated = false;
+  subFloor.checked = true; updateFloorUI();
+});
 
 // Ждём резкий скачок яркости (вспышку). Низкий фикс. порог — не зависит от настройки чувствительности.
 async function waitFlash(maxMs){
