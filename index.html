@@ -605,7 +605,7 @@ async function runRep(){
   } else if(type==='slur'){
     speak('Ready go', {rate:1.5, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
   } else {
-    speak('Go', {onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+    speak('Go', {rate:1.5, onStart:(t)=>{ t0=t; setWord('GO!','go'); }}); // резко, как в «редиго»
   }
   // ждём t0 (момент звука) — для голоса берётся из onstart
   while(t0===null && running){ await sleep(4); }
