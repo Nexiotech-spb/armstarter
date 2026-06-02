@@ -670,7 +670,7 @@ async function runRep(){
   if(falseStart){
     setWord('ФАЛЬСТАРТ','false'); setStatus('Фальстарт'); recordFalse();
     speak('False start', {pitch:1.0});
-    await sleep(3500);   // показ результата дольше (x2.5)
+    await sleep(2000);   // показ фальстарта 2 сек
     return;
   }
 
