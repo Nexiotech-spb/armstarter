@@ -151,6 +151,23 @@
   </div>
 
   <div class="panel">
+    <h2>Сигнал старта</h2>
+    <div class="checks">
+      <label><input type="radio" name="sig" id="sigBeep" value="beep" checked>
+        📣 Бип — точный замер (для данных и калибровки)</label>
+      <label><input type="radio" name="sig" id="sigVoice" value="voice">
+        🔊 Голос — имитация соревнований (замер приблизительный)</label>
+    </div>
+    <div class="field" id="voffWrap">
+      <label>Поправка для голоса <b id="vVoff">0</b> мс</label>
+      <input type="range" id="voff" min="0" max="500" step="10" value="0">
+    </div>
+    <div class="hint">Сравни среднюю в режиме «Бип» и «Голос» на одинаковых повторах —
+      разницу впиши сюда: она вычитается из голосовых замеров, чтобы те совпали с реальной
+      реакцией. В режиме «Бип» поправка не применяется.</div>
+  </div>
+
+  <div class="panel">
     <h2>Камера и чувствительность</h2>
     <div class="field">
       <label>Чувствительность к движению <b id="vSens">средняя</b></label>
@@ -224,6 +241,11 @@ const types = {
   readyGo: document.getElementById('tReadyGo'),
   slur:    document.getElementById('tSlur'),
 };
+
+bindRange('voff','vVoff');
+function readSig(){ cfg.signalMode = document.querySelector('input[name="sig"]:checked').value; }
+document.querySelectorAll('input[name="sig"]').forEach(r=>r.addEventListener('change', readSig));
+readSig();
 
 /* ---------- Камера ---------- */
 let stream=null, facing='user';
@@ -341,6 +363,43 @@ calBtn.addEventListener('click', async ()=>{
   calBtn.textContent='Готово ✓';
   setTimeout(()=>calBtn.textContent='Калибровать порог',1200);
 });
+
+/* ---------- Web Audio: точный сигнал «Go» ---------- */
+let audioCtx=null;
+function ensureAudio(){
+  if(!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(AC) audioCtx = new AC();
+  }
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+// Планирует резкий тон и возвращает ТОЧНЫЙ момент звука (в шкале performance.now()).
+// Дожидается этого момента внутри, чтобы отсчёт реакции начался ровно со звука.
+async function goBeep(){
+  const ctx = ensureAudio();
+  if(!ctx){ const t=performance.now(); return t; } // нет Web Audio — деградируем
+  const lead = 0.06;                         // запас на планирование
+  const startAudio = ctx.currentTime + lead; // когда тон стартует по аудио-часам
+  const audioNow = ctx.currentTime;
+  const perfNow = performance.now();
+  const outLat = (ctx.outputLatency || ctx.baseLatency || 0); // задержка вывода динамика
+  // момент, когда звук реально выйдет из динамика, в шкале performance.now()
+  const t0 = perfNow + (startAudio - audioNow)*1000 + outLat*1000;
+
+  const osc = ctx.createOscillator(), g = ctx.createGain();
+  osc.type='sine'; osc.frequency.value=1000;
+  g.gain.setValueAtTime(0, startAudio);
+  g.gain.linearRampToValueAtTime(0.6, startAudio+0.002); // резкая атака для точного начала
+  g.gain.setValueAtTime(0.6, startAudio+0.10);
+  g.gain.linearRampToValueAtTime(0, startAudio+0.12);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(startAudio); osc.stop(startAudio+0.13);
+
+  const wait = t0 - performance.now();
+  if(wait>0) await sleep(wait);
+  return t0;
+}
 
 /* ---------- Синтез речи ---------- */
 let voice=null;
@@ -534,15 +593,18 @@ async function runRep(){
     return;
   }
 
-  // 3) Команда GO — засекаем t0 в момент начала озвучки
+  // 3) Команда GO — засекаем t0 в ТОЧНЫЙ момент звука
   let t0=null;
   setStatus('Реагируй!');
-  if(type==='slur'){
+  if(cfg.signalMode==='beep'){
+    t0 = await goBeep();          // точный момент звука, ждём до него внутри
+    setWord('GO!','go');
+  } else if(type==='slur'){
     speak('Ready go', {rate:1.5, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
   } else {
     speak('Go', {onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
   }
-  // ждём t0 (момент звука)
+  // ждём t0 (момент звука) — для голоса берётся из onstart
   while(t0===null && running){ await sleep(4); }
   if(!running) return;
 
@@ -554,7 +616,8 @@ async function runRep(){
     await sleep(1200);
     return;
   }
-  const ms = t1 - t0;
+  let ms = t1 - t0;
+  if(cfg.signalMode==='voice') ms = Math.max(0, ms - (cfg.voff||0)); // поправка только для голоса
   recordReaction(ms);
   setWord(Math.round(ms)+' мс','ms'); setStatus('Реакция: '+Math.round(ms));
   await sleep(1300);
@@ -571,7 +634,8 @@ async function loop(){
 async function startTraining(){
   errEl.textContent='';
   if(!stream){ await initCamera(); if(!stream) return; }
-  // разблокировать синтез речи жестом пользователя (важно для iOS)
+  // разблокировать аудио жестом пользователя (важно для iOS)
+  ensureAudio();
   speak(' ', {rate:1});
   pickVoice();
   // новый заход — обнуляем сессию и график
