@@ -123,6 +123,14 @@
   </div>
 
   <div class="panel">
+    <h2>Голос рефери</h2>
+    <select id="voiceSel" style="width:100%; padding:11px; border-radius:10px; background:#21262d; color:var(--text); border:1px solid var(--line); font-size:15px;"></select>
+    <div class="hint">Если голос женский — выбери мужской из списка (на iPhone это обычно
+      <b>Daniel</b> или <b>Aaron</b>). Выбор запоминается на этом устройстве. Если мужских нет —
+      догрузи их: Настройки → Универсальный доступ → Устный контент → Голоса → English.</div>
+  </div>
+
+  <div class="panel">
     <h2>Настройки</h2>
 
     <div class="checks">
@@ -406,26 +414,59 @@ async function goBeep(){
 
 /* ---------- Синтез речи ---------- */
 let voice=null;
+const voiceSel = document.getElementById('voiceSel');
+let manualVoiceName = localStorage.getItem('armVoiceName') || '';
+
+function enVoices(){ return speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang)); }
+
 function pickVoice(){
-  const vs = speechSynthesis.getVoices();
-  const en = vs.filter(v=>/^en/i.test(v.lang));
-  // нормальные мужские голоса по приоритету (Alex — лучший естественный на Mac); без «новелти»
+  const all = speechSynthesis.getVoices();
+  const en = all.filter(v=>/^en/i.test(v.lang));
+  // если пользователь выбрал голос вручную — уважаем его
+  if(manualVoiceName){
+    const chosen = all.find(v=>v.name===manualVoiceName);
+    if(chosen){ voice=chosen; return; }
+  }
+  // иначе — нормальные мужские по приоритету (Alex на Mac; Daniel/Aaron на iOS); без «новелти»
   const prefer = ['alex','daniel','tom','aaron','arthur','oliver','nathan','david','mark',
                   'guy','james','rishi','google uk english male'];
   for(const key of prefer){
     const hit = en.find(v=>v.name.toLowerCase().includes(key));
     if(hit){ voice=hit; return; }
   }
-  voice = en.find(v=>/en[-_]US/i.test(v.lang)) || en[0] || vs[0] || null;
+  voice = en.find(v=>/en[-_]US/i.test(v.lang)) || en[0] || all[0] || null;
+}
+
+// Заполнить выпадающий список голосов (на iOS голоса появляются с задержкой)
+function populateVoices(){
+  const en = enVoices();
+  pickVoice();
+  if(!voiceSel) return;
+  if(!en.length){ voiceSel.innerHTML='<option>Голоса загружаются…</option>'; return; }
+  voiceSel.innerHTML='';
+  en.forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v.name; o.textContent=v.name+' · '+v.lang;
+    if(voice && v.name===voice.name) o.selected=true;
+    voiceSel.appendChild(o);
+  });
+}
+if(voiceSel){
+  voiceSel.addEventListener('change', ()=>{
+    manualVoiceName = voiceSel.value;
+    localStorage.setItem('armVoiceName', manualVoiceName);
+    pickVoice();
+  });
 }
 if('speechSynthesis' in window){
-  pickVoice();
-  speechSynthesis.onvoiceschanged = pickVoice;
+  populateVoices();
+  speechSynthesis.onvoiceschanged = populateVoices;
 }
 // Говорит фразу; onStart вызывается в момент начала озвучки
 function speak(text, {rate=1, pitch=1, volume=1, onStart}={}){
   return new Promise(resolve=>{
     if(!('speechSynthesis' in window)){ if(onStart) onStart(performance.now()); return resolve(); }
+    if(!voice) pickVoice();                       // голоса могли подгрузиться только сейчас (iOS)
     const u = new SpeechSynthesisUtterance(text);
     if(voice) u.voice=voice;
     u.lang='en-US'; u.rate=rate; u.pitch=pitch; u.volume=volume;
@@ -673,7 +714,7 @@ async function startTraining(){
   // разблокировать аудио жестом пользователя (важно для iOS)
   ensureAudio();
   speak(' ', {rate:1});
-  pickVoice();
+  populateVoices();          // после жеста на iOS голоса обычно уже доступны — обновим список и выбор
   // новый заход — обнуляем сессию и график
   reps=0; falses=0; sum=0; count=0; best=Infinity; sessionLog.length=0;
   S.last.textContent='—'; S.avg.textContent='—'; S.best.textContent='—';
