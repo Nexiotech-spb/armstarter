@@ -175,7 +175,7 @@
   </div>
 
   <div class="panel manual-only">
-    <h2>Камера и чувствительность</h2>
+    <h2>Камера и порог движения</h2>
     <div class="field">
       <label>Чувствительность к движению <b id="vSens">средняя</b></label>
       <input type="range" id="sens" min="1" max="100" step="1" value="55">
@@ -188,6 +188,13 @@
       <button id="flipBtn">⟳ Сменить камеру</button>
       <button id="calBtn">Калибровать порог</button>
     </div>
+    <div class="hint">Поставь руку внутрь рамки и держи неподвижно. Полоска снизу — текущее
+      движение; в покое она должна быть почти пустой. Нажми «Калибровать», держа руку
+      неподвижно ~1.5 с — порог подстроится автоматически.</div>
+  </div>
+
+  <div class="panel manual-only">
+    <h2>Задержка системы (авто-тест)</h2>
     <div class="ctlrow">
       <button id="latBtn">🧪 Авто-тест задержки (без реакции)</button>
     </div>
@@ -200,9 +207,6 @@
     </label>
     <div class="ctlrow"><button id="resetFloorBtn">Сбросить задержку</button></div>
     <div class="hint" id="floorStatus"></div>
-    <div class="hint">Поставь руку внутрь рамки и держи неподвижно. Полоска снизу — текущее
-      движение; в покое она должна быть почти пустой. Нажми «Калибровать», держа руку
-      неподвижно ~1.5 с — порог подстроится автоматически.</div>
   </div>
 
   <details class="manual-only">
