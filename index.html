@@ -157,19 +157,6 @@
   </div>
 
   <div class="panel">
-    <h2>Сигнал старта</h2>
-    <div class="checks">
-      <label><input type="radio" name="sig" id="sigBeep" value="beep" checked>
-        📣 Бип — точный замер (для данных и калибровки)</label>
-      <label><input type="radio" name="sig" id="sigVoice" value="voice">
-        🔊 Голос — имитация соревнований (замер приблизительный)</label>
-    </div>
-    <div class="hint">В режиме «Голос» из замера автоматически вычитается фиксированная
-      поправка на задержку синтеза речи (100 мс) — чтобы цифры совпадали с режимом «Бип».
-      В режиме «Бип» поправка не применяется.</div>
-  </div>
-
-  <div class="panel">
     <h2>Камера и чувствительность</h2>
     <div class="field">
       <label>Чувствительность к движению <b id="vSens">средняя</b></label>
@@ -257,9 +244,7 @@ const types = {
 };
 
 const VOICE_OFFSET = 100;   // фикс. поправка на задержку синтеза речи (мс), не меняется
-function readSig(){ cfg.signalMode = document.querySelector('input[name="sig"]:checked').value; }
-document.querySelectorAll('input[name="sig"]').forEach(r=>r.addEventListener('change', readSig));
-readSig();
+cfg.signalMode = 'voice';   // в интерфейсе только голос; бип используется лишь в авто-тесте
 
 /* ---------- Камера ---------- */
 let stream=null, facing='user';
