@@ -164,13 +164,9 @@
       <label><input type="radio" name="sig" id="sigVoice" value="voice">
         🔊 Голос — имитация соревнований (замер приблизительный)</label>
     </div>
-    <div class="field" id="voffWrap">
-      <label>Поправка для голоса <b id="vVoff">0</b> мс</label>
-      <input type="range" id="voff" min="0" max="500" step="10" value="0">
-    </div>
-    <div class="hint">Сравни среднюю в режиме «Бип» и «Голос» на одинаковых повторах —
-      разницу впиши сюда: она вычитается из голосовых замеров, чтобы те совпали с реальной
-      реакцией. В режиме «Бип» поправка не применяется.</div>
+    <div class="hint">В режиме «Голос» из замера автоматически вычитается фиксированная
+      поправка на задержку синтеза речи (100 мс) — чтобы цифры совпадали с режимом «Бип».
+      В режиме «Бип» поправка не применяется.</div>
   </div>
 
   <div class="panel">
@@ -260,14 +256,7 @@ const types = {
   slur:    document.getElementById('tSlur'),
 };
 
-bindRange('voff','vVoff');
-// поправка для голоса сохраняется отдельно на каждом устройстве
-(function(){
-  const el=document.getElementById('voff');
-  const saved=localStorage.getItem('armVoff');
-  if(saved!=null){ el.value=saved; el.dispatchEvent(new Event('input')); }
-  el.addEventListener('input', e=>localStorage.setItem('armVoff', e.target.value));
-})();
+const VOICE_OFFSET = 100;   // фикс. поправка на задержку синтеза речи (мс), не меняется
 function readSig(){ cfg.signalMode = document.querySelector('input[name="sig"]:checked').value; }
 document.querySelectorAll('input[name="sig"]').forEach(r=>r.addEventListener('change', readSig));
 readSig();
@@ -647,7 +636,7 @@ async function runRep(){
   }
   let ms = t1 - t0;
   if(subFloor.checked) ms -= sysFloor;                               // вычет задержки тракта (камера+обработка)
-  if(cfg.signalMode==='voice') ms -= (cfg.voff||0);                  // доп. поправка для голоса
+  if(cfg.signalMode==='voice') ms -= VOICE_OFFSET;                   // фикс. поправка для голоса
   ms = Math.max(0, ms);
   recordReaction(ms);
   setWord(Math.round(ms)+' мс','ms'); setStatus('Реакция: '+Math.round(ms));
