@@ -408,7 +408,13 @@ async function goBeep(){
 let voice=null;
 function pickVoice(){
   const vs = speechSynthesis.getVoices();
-  voice = vs.find(v=>/en[-_]US/i.test(v.lang)) || vs.find(v=>/^en/i.test(v.lang)) || vs[0] || null;
+  const en   = vs.filter(v=>/^en/i.test(v.lang));
+  const enUS = en.filter(v=>/en[-_]US/i.test(v.lang));
+  // предпочитаем мужские голоса по имени
+  const maleKeys = ['male','alex','daniel','fred','aaron','tom','rishi','arthur','gordon',
+                    'oliver','david','mark','guy','james','reed','eddy','albert','bruce'];
+  const findMale = arr => arr.find(v=>maleKeys.some(k=>v.name.toLowerCase().includes(k)));
+  voice = findMale(enUS) || findMale(en) || enUS[0] || en[0] || vs[0] || null;
 }
 if('speechSynthesis' in window){
   pickVoice();
@@ -592,7 +598,7 @@ async function runRep(){
 
   if(type==='readyGo'){
     setWord('READY','ready'); setStatus('Ready');
-    await speak('Ready');                         // сторож уже следит во время «Ready»
+    await speak('Ready', {pitch:0.85});           // сторож уже следит во время «Ready»
     if(!running){ watching=false; mbar.classList.remove('armed'); return; }
   } else {
     setStatus('Замри'); setWord('•','ready');
@@ -606,7 +612,7 @@ async function runRep(){
   if(!running) return;
   if(falseStart){
     setWord('ФАЛЬСТАРТ','false'); setStatus('Фальстарт'); recordFalse();
-    speak('False start');
+    speak('False start', {pitch:0.85});
     await sleep(1400);
     return;
   }
@@ -619,9 +625,9 @@ async function runRep(){
     setWord('GO!','go');
   } else if(type==='slur'){
     // «редиго» слитно — одна фраза без зазора, быстрее (чтобы «Ready» проскакивал)
-    speak('Ready go', {rate:1.4, pitch:1.1, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+    speak('Ready go', {rate:1.4, pitch:0.85, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
   } else {
-    speak('Go', {rate:1.4, onStart:(t)=>{ t0=t; setWord('GO!','go'); }}); // резко, как в «редиго»
+    speak('Go', {rate:1.4, pitch:0.85, onStart:(t)=>{ t0=t; setWord('GO!','go'); }}); // резко, как в «редиго»
   }
   // ждём t0 (момент звука) — для голоса берётся из onstart
   while(t0===null && running){ await sleep(4); }
