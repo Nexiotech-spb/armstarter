@@ -670,7 +670,7 @@ async function runRep(){
   if(falseStart){
     setWord('ФАЛЬСТАРТ','false'); setStatus('Фальстарт'); recordFalse();
     speak('False start', {pitch:1.0});
-    await sleep(1400);
+    await sleep(3500);   // показ результата дольше (x2.5)
     return;
   }
 
@@ -693,7 +693,7 @@ async function runRep(){
   if(!running) return;
   if(t1===null){
     setWord('— нет реакции','ready'); setStatus('Пропуск'); recordMiss();
-    await sleep(1200);
+    await sleep(3000);   // показ результата дольше (x2.5)
     return;
   }
   let ms = t1 - t0;
@@ -702,7 +702,7 @@ async function runRep(){
   ms = Math.max(0, ms);
   recordReaction(ms);
   setWord(Math.round(ms)+' мс','ms'); setStatus('Реакция: '+Math.round(ms));
-  await sleep(1300);
+  await sleep(3250);   // показ результата дольше (x2.5)
 }
 
 async function loop(){
