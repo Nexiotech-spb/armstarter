@@ -415,12 +415,12 @@ if('speechSynthesis' in window){
   speechSynthesis.onvoiceschanged = pickVoice;
 }
 // Говорит фразу; onStart вызывается в момент начала озвучки
-function speak(text, {rate=1, onStart}={}){
+function speak(text, {rate=1, pitch=1, volume=1, onStart}={}){
   return new Promise(resolve=>{
     if(!('speechSynthesis' in window)){ if(onStart) onStart(performance.now()); return resolve(); }
     const u = new SpeechSynthesisUtterance(text);
     if(voice) u.voice=voice;
-    u.lang='en-US'; u.rate=rate; u.pitch=1; u.volume=1;
+    u.lang='en-US'; u.rate=rate; u.pitch=pitch; u.volume=volume;
     let started=false;
     u.onstart=()=>{ started=true; if(onStart) onStart(performance.now()); };
     u.onend=()=>resolve();
@@ -618,7 +618,9 @@ async function runRep(){
     t0 = await goBeep();          // точный момент звука, ждём до него внутри
     setWord('GO!','go');
   } else if(type==='slur'){
-    speak('Ready go', {rate:1.25, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+    // «редиго» слитно, ударение на первом слоге: «Ready» громче и выше, «go» тише и ниже
+    speak('Ready', {rate:1.25, pitch:1.25, volume:1.0,  onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+    speak('go',    {rate:1.25, pitch:0.85, volume:0.5});
   } else {
     speak('Go', {rate:1.25, onStart:(t)=>{ t0=t; setWord('GO!','go'); }}); // резко, как в «редиго»
   }
