@@ -75,9 +75,13 @@
   .hint{color:var(--muted); font-size:12px; line-height:1.5; margin-top:8px;}
   .err{color:var(--danger); font-size:13px; margin-top:8px;}
   details summary{cursor:pointer; color:var(--muted); font-size:13px; margin-top:14px;}
+  #flash{position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:9999;}
+  #flash.on{opacity:1;}
+  #latOut{margin-top:8px;}
 </style>
 </head>
 <body>
+<div id="flash"></div>
 <div class="wrap">
   <h1><span>Arm</span>Starter — тренировка старта</h1>
 
@@ -183,6 +187,12 @@
       <button id="flipBtn">⟳ Сменить камеру</button>
       <button id="calBtn">Калибровать порог</button>
     </div>
+    <div class="ctlrow">
+      <button id="latBtn">🧪 Авто-тест задержки (без реакции)</button>
+    </div>
+    <div class="hint" id="latOut">Авто-тест измеряет «пол» системы: на бип экран
+      вспыхивает, камера ловит вспышку — человек не участвует. Вычти это из своих замеров,
+      чтобы узнать чистую реакцию. Лучше в неярком помещении, лицом к экрану.</div>
     <div class="hint">Поставь руку внутрь рамки и держи неподвижно. Полоска снизу — текущее
       движение; в покое она должна быть почти пустой. Нажми «Калибровать», держа руку
       неподвижно ~1.5 с — порог подстроится автоматически.</div>
@@ -658,7 +668,7 @@ async function startTraining(){
   introThenLoop();
 }
 function stopTraining(){
-  running=false; startBtn.disabled=false; stopBtn.disabled=true;
+  running=false; testing=false; startBtn.disabled=false; stopBtn.disabled=true;
   mbar.classList.remove('armed');
   if('speechSynthesis' in window) speechSynthesis.cancel();
   setWord('',''); setStatus('Стоп');
@@ -666,6 +676,45 @@ function stopTraining(){
 
 startBtn.addEventListener('click', startTraining);
 stopBtn.addEventListener('click', stopTraining);
+
+/* ---------- Авто-тест задержки (система «слышит» бип и реагирует вспышкой) ---------- */
+const flash  = document.getElementById('flash');
+const latBtn = document.getElementById('latBtn');
+const latOut = document.getElementById('latOut');
+let testing=false;
+
+async function runLatencyTest(){
+  if(running || testing) return;
+  if(!stream){ await initCamera(); if(!stream) return; }
+  ensureAudio();
+  testing=true; latBtn.disabled=true; startBtn.disabled=true;
+  const rounds=6, res=[];
+  for(let r=0; r<rounds && testing; r++){
+    setWord('Тест '+(r+1)+'/'+rounds,'tip'); setStatus('Авто-тест');
+    await sleep(700 + Math.random()*1200);
+    if(!testing) break;
+    const t0 = await goBeep();            // точный момент бипа
+    flash.classList.add('on');           // вспышка экрана = световой сигнал для камеры
+    const t1 = await waitMotion(1000);   // камера ловит вспышку
+    flash.classList.remove('on');
+    if(t1!==null){ res.push(t1 - t0); setWord(Math.round(t1 - t0)+' мс','ms'); }
+    else { setWord('—','ready'); }
+    await sleep(700);
+  }
+  flash.classList.remove('on');
+  testing=false; latBtn.disabled=false; startBtn.disabled=false;
+  setWord('',''); setStatus('Готов');
+  if(res.length){
+    const avg = res.reduce((a,b)=>a+b,0)/res.length;
+    const mn  = Math.min(...res);
+    latOut.innerHTML = 'Задержка системы (камера + обработка): <b>'+Math.round(avg)+
+      ' мс</b> · мин '+Math.round(mn)+' · замеров '+res.length+
+      '. Это «пол» — вычти из своих результатов, чтобы оценить чистую реакцию.';
+  } else {
+    latOut.textContent = 'Вспышку поймать не удалось — затемни помещение (или направь камеру к экрану) и повтори.';
+  }
+}
+latBtn.addEventListener('click', runLatencyTest);
 
 /* запросим камеру сразу, чтобы видеть превью (на iOS включится после жеста/HTTPS) */
 window.addEventListener('load', ()=>{ drawChart(); initCamera(); });
