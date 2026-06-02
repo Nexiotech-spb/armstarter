@@ -599,11 +599,11 @@ async function runRep(){
   })();
 
   if(type==='readyGo'){
-    setWord('READY','ready'); setStatus('Ready');
+    setStatus('Ready');                          // без надписи на экране — только звук
     await speak('Ready', {pitch:1.0});           // сторож уже следит во время «Ready»
     if(!running){ watching=false; mbar.classList.remove('armed'); return; }
   } else {
-    setStatus('Замри'); setWord('•','ready');
+    setStatus('Замри');
   }
 
   // случайная выдержка перед GO (сторож продолжает следить)
@@ -619,17 +619,15 @@ async function runRep(){
     return;
   }
 
-  // 3) Команда GO — засекаем t0 в ТОЧНЫЙ момент звука
+  // 3) Команда GO — засекаем t0 в ТОЧНЫЙ момент звука (без визуальной подсказки)
   let t0=null;
-  setStatus('Реагируй!');
   if(cfg.signalMode==='beep'){
     t0 = await goBeep();          // точный момент звука, ждём до него внутри
-    setWord('GO!','go');
   } else if(type==='slur'){
     // «редиго» слитно — одна фраза без зазора, быстрее (чтобы «Ready» проскакивал)
-    speak('Ready go', {rate:1.4, pitch:1.0, onStart:(t)=>{ t0=t; setWord('GO!','go'); }});
+    speak('Ready go', {rate:1.4, pitch:1.0, onStart:(t)=>{ t0=t; }}); // без надписи — только звук
   } else {
-    speak('Go', {rate:1.4, pitch:1.0, onStart:(t)=>{ t0=t; setWord('GO!','go'); }}); // резко, как в «редиго»
+    speak('Go', {rate:1.4, pitch:1.0, onStart:(t)=>{ t0=t; }}); // без надписи — только звук
   }
   // ждём t0 (момент звука) — для голоса берётся из onstart
   while(t0===null && running){ await sleep(4); }
