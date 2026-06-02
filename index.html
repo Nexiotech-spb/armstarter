@@ -75,15 +75,25 @@
   .hint{color:var(--muted); font-size:12px; line-height:1.5; margin-top:8px;}
   .err{color:var(--danger); font-size:13px; margin-top:8px;}
   details summary{cursor:pointer; color:var(--muted); font-size:13px; margin-top:14px;}
+  .modes{display:flex; gap:8px; margin:0 0 12px;}
+  .modes button{flex:1; font-size:14px; font-weight:700; padding:9px; border-radius:10px;
+    border:1px solid var(--line); background:#21262d; color:var(--muted); cursor:pointer;}
+  .modes button.active{background:var(--accent2); color:#fff; border-color:var(--accent2);}
+  body.mode-auto .manual-only{display:none;}
   #flash{position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:9999;}
   #flash.on{opacity:1;}
   #latOut{margin-top:8px;}
 </style>
 </head>
-<body>
+<body class="mode-auto">
 <div id="flash"></div>
 <div class="wrap">
   <h1><span>ArmWrestling</span>Starter — тренировка старта</h1>
+
+  <div class="modes">
+    <button id="modeAutoBtn">Авто</button>
+    <button id="modeManualBtn">Мануал</button>
+  </div>
 
   <div class="stage">
     <video id="video" playsinline muted autoplay></video>
@@ -122,7 +132,7 @@
     <div class="ctlrow"><button id="clearChartBtn">Очистить график</button></div>
   </div>
 
-  <div class="panel">
+  <div class="panel manual-only">
     <h2>Голос рефери</h2>
     <select id="voiceSel" style="width:100%; padding:11px; border-radius:10px; background:#21262d; color:var(--text); border:1px solid var(--line); font-size:15px;"></select>
     <div class="hint">Если голос женский — выбери мужской из списка (на iPhone это обычно
@@ -130,7 +140,7 @@
       догрузи их: Настройки → Универсальный доступ → Устный контент → Голоса → English.</div>
   </div>
 
-  <div class="panel">
+  <div class="panel manual-only">
     <h2>Настройки</h2>
 
     <div class="checks">
@@ -164,7 +174,7 @@
       движение в это время = фальстарт. Чем шире диапазон, тем труднее угадать момент.</div>
   </div>
 
-  <div class="panel">
+  <div class="panel manual-only">
     <h2>Камера и чувствительность</h2>
     <div class="field">
       <label>Чувствительность к движению <b id="vSens">средняя</b></label>
@@ -195,7 +205,7 @@
       неподвижно ~1.5 с — порог подстроится автоматически.</div>
   </div>
 
-  <details>
+  <details class="manual-only">
     <summary>Как запускать (Mac / iPhone) и про точность</summary>
     <div class="hint">
       <b>Mac:</b> двойной клик по <code>start-mac.command</code> — откроется браузер с камерой.<br>
@@ -732,6 +742,20 @@ function stopTraining(){
 
 startBtn.addEventListener('click', startTraining);
 stopBtn.addEventListener('click', stopTraining);
+
+/* ---------- Режим интерфейса: Авто (чисто) / Мануал (все настройки) ---------- */
+const modeAutoBtn   = document.getElementById('modeAutoBtn');
+const modeManualBtn = document.getElementById('modeManualBtn');
+function setMode(mode){
+  const auto = mode!=='manual';
+  document.body.classList.toggle('mode-auto', auto);
+  modeAutoBtn.classList.toggle('active', auto);
+  modeManualBtn.classList.toggle('active', !auto);
+  localStorage.setItem('armMode', auto?'auto':'manual');
+}
+modeAutoBtn.addEventListener('click', ()=>setMode('auto'));
+modeManualBtn.addEventListener('click', ()=>setMode('manual'));
+setMode(localStorage.getItem('armMode') || 'auto');   // по умолчанию — Авто
 
 /* ---------- Авто-тест задержки (система «слышит» бип и реагирует вспышкой) ---------- */
 const flash  = document.getElementById('flash');
