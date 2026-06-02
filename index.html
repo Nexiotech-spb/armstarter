@@ -191,8 +191,13 @@
       <button id="latBtn">🧪 Авто-тест задержки (без реакции)</button>
     </div>
     <div class="hint" id="latOut">Авто-тест измеряет «пол» системы: на бип экран
-      вспыхивает, камера ловит вспышку — человек не участвует. Вычти это из своих замеров,
-      чтобы узнать чистую реакцию. Лучше в неярком помещении, лицом к экрану.</div>
+      вспыхивает, камера ловит вспышку — человек не участвует. Это значение затем
+      автоматически вычитается из замеров. Лучше в неярком помещении, лицом к экрану.</div>
+    <label style="display:flex; align-items:center; gap:10px; margin-top:10px; font-size:15px;">
+      <input type="checkbox" id="subFloor" style="width:20px; height:20px;">
+      Вычитать задержку системы: <b id="floorVal" style="color:var(--accent2);">0</b> мс
+    </label>
+    <div class="ctlrow"><button id="resetFloorBtn">Сбросить задержку</button></div>
     <div class="hint">Поставь руку внутрь рамки и держи неподвижно. Полоска снизу — текущее
       движение; в покое она должна быть почти пустой. Нажми «Калибровать», держа руку
       неподвижно ~1.5 с — порог подстроится автоматически.</div>
@@ -633,7 +638,9 @@ async function runRep(){
     return;
   }
   let ms = t1 - t0;
-  if(cfg.signalMode==='voice') ms = Math.max(0, ms - (cfg.voff||0)); // поправка только для голоса
+  if(subFloor.checked) ms -= sysFloor;                               // вычет задержки тракта (камера+обработка)
+  if(cfg.signalMode==='voice') ms -= (cfg.voff||0);                  // доп. поправка для голоса
+  ms = Math.max(0, ms);
   recordReaction(ms);
   setWord(Math.round(ms)+' мс','ms'); setStatus('Реакция: '+Math.round(ms));
   await sleep(1300);
@@ -687,6 +694,21 @@ const latBtn = document.getElementById('latBtn');
 const latOut = document.getElementById('latOut');
 let testing=false;
 
+/* «Пол» системы (задержка камеры+обработки), вычитается из замеров */
+let sysFloor = parseFloat(localStorage.getItem('armSysFloor')||'0') || 0;
+const subFloor = document.getElementById('subFloor');
+const floorVal = document.getElementById('floorVal');
+const resetFloorBtn = document.getElementById('resetFloorBtn');
+function updateFloorUI(){ floorVal.textContent = Math.round(sysFloor); }
+function setFloor(ms){
+  sysFloor = Math.max(0, Math.round(ms));
+  localStorage.setItem('armSysFloor', sysFloor);
+  subFloor.checked = sysFloor>0;
+  updateFloorUI();
+}
+subFloor.checked = sysFloor>0; updateFloorUI();
+resetFloorBtn.addEventListener('click', ()=>{ setFloor(0); subFloor.checked=false; });
+
 // Ждём резкий скачок яркости (вспышку). Низкий фикс. порог — не зависит от настройки чувствительности.
 async function waitFlash(maxMs){
   const t0=performance.now(); let peak=0;
@@ -728,10 +750,11 @@ async function runLatencyTest(){
   if(res.length){
     const avg = res.reduce((a,b)=>a+b,0)/res.length;
     const mn  = Math.min(...res);
+    setFloor(avg);                                    // сохраняем и включаем авто-вычет
     setWord('Пол ≈ '+Math.round(avg)+' мс','ms');     // крупно и остаётся на экране
     latOut.innerHTML = '<b style="color:#58a6ff;font-size:16px;">Задержка системы ≈ '+
       Math.round(avg)+' мс</b> (мин '+Math.round(mn)+', замеров '+res.length+')'+camTxt+
-      '.<br>Это «пол» — вычти из своих результатов: чистая реакция ≈ замер − '+Math.round(avg)+' мс.';
+      '.<br>Авто-вычет включён: теперь показывается чистая реакция (замер − '+Math.round(avg)+' мс).';
   } else {
     setWord('вспышка слабая','tip');
     latOut.innerHTML = 'Вспышку поймать не удалось (пик яркости '+peakMax.toFixed(3)+
