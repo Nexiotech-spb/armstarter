@@ -102,6 +102,11 @@
     <div class="motionbar" id="mbar"><i></i></div>
   </div>
 
+  <div class="field" style="margin:10px 0;">
+    <label>Размер рамки <b id="vRoi">60</b>%</label>
+    <input type="range" id="roi" min="20" max="100" step="5" value="60">
+  </div>
+
   <div class="row">
     <button id="startBtn">▶ Старт</button>
     <button id="stopBtn" disabled>■ Стоп</button>
@@ -179,10 +184,6 @@
     <div class="field">
       <label>Чувствительность к движению <b id="vSens">средняя</b></label>
       <input type="range" id="sens" min="1" max="100" step="1" value="55">
-    </div>
-    <div class="field">
-      <label>Размер зоны слежения (рамка) <b id="vRoi">60</b>%</label>
-      <input type="range" id="roi" min="20" max="100" step="5" value="60">
     </div>
     <div class="ctlrow">
       <button id="flipBtn">⟳ Сменить камеру</button>
