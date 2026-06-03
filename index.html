@@ -18,7 +18,9 @@
   h1 span{color:var(--accent);}
 
   .stage{position:relative; width:100%; aspect-ratio:4/3; background:#000;
-    border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+    border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    touch-action:none; cursor:grab;}
+  .stage.dragging{cursor:grabbing;}
   video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
     transform:scaleX(-1);} /* зеркало */
   #overlay{position:absolute; inset:0; width:100%; height:100%;}
@@ -108,6 +110,7 @@
     <label>Размер рамки <b id="vRoi">40</b>%</label>
     <input type="range" id="roi" min="15" max="100" step="5" value="40">
   </div>
+  <div class="hint" style="margin:0 0 6px;">Рамку можно двигать пальцем прямо по видео.</div>
 
   <div class="row">
     <button id="startBtn">▶ Старт</button>
@@ -315,10 +318,16 @@ function startFrameLoop(){
   if(useRVFC) video.requestVideoFrameCallback(tick); else requestAnimationFrame(tick);
 }
 
+// Центр рамки в долях RAW-кадра (по умолчанию центр); можно двигать пальцем по видео.
+let roiCx = parseFloat(localStorage.getItem('armRoiX')); if(isNaN(roiCx)) roiCx=0.5;
+let roiCy = parseFloat(localStorage.getItem('armRoiY')); if(isNaN(roiCy)) roiCy=0.5;
+
 function roiBounds(){
   const f = (cfg.roi||40)/100;
   const w = Math.round(PW*f), h = Math.round(PH*f);
-  const x = Math.round((PW-w)/2), y = Math.round((PH-h)/2);
+  let x = Math.round(roiCx*PW - w/2), y = Math.round(roiCy*PH - h/2);
+  x = Math.max(0, Math.min(PW-w, x));
+  y = Math.max(0, Math.min(PH-h, y));
   return {x,y,w,h};
 }
 
@@ -368,12 +377,44 @@ function drawOverlay(motion){
   const W=overlay.width, H=overlay.height;
   octx.clearRect(0,0,W,H);
   const f=(cfg.roi||40)/100;
-  const w=W*f, h=H*f, x=(W-w)/2, yb=(H-h)/2;
+  const w=W*f, h=H*f;
+  let x=(1-roiCx)*W - w/2, yb=roiCy*H - h/2;   // зеркально — под отражённое видео
+  x=Math.max(0,Math.min(W-w,x)); yb=Math.max(0,Math.min(H-h,yb));
   octx.lineWidth=2; octx.strokeStyle='rgba(46,160,67,.8)';
   octx.setLineDash([8,6]); octx.strokeRect(x,yb,w,h); octx.setLineDash([]);
   // полоска движения относительно порога
   const ratio = Math.min(1, motion/(motionThreshold()*2));
   mbarFill.style.width = (ratio*100).toFixed(0)+'%';
+}
+
+/* ---------- Перетаскивание рамки пальцем/мышью по видео ---------- */
+const stage = document.querySelector('.stage');
+let dragging=false;
+function moveRoiTo(clientX, clientY){
+  const r = stage.getBoundingClientRect();
+  if(!r.width || !r.height) return;
+  const sx=(clientX-r.left)/r.width, sy=(clientY-r.top)/r.height;
+  const f=(cfg.roi||40)/100, half=f/2;
+  roiCx = Math.max(half, Math.min(1-half, 1 - sx));   // зеркально (видео отражено)
+  roiCy = Math.max(half, Math.min(1-half, sy));
+  localStorage.setItem('armRoiX', roiCx.toFixed(3));
+  localStorage.setItem('armRoiY', roiCy.toFixed(3));
+}
+if(stage && window.PointerEvent){
+  stage.addEventListener('pointerdown', e=>{
+    dragging=true; stage.classList.add('dragging');
+    try{ stage.setPointerCapture(e.pointerId); }catch(_){}
+    moveRoiTo(e.clientX,e.clientY); e.preventDefault();
+  });
+  stage.addEventListener('pointermove', e=>{ if(dragging){ moveRoiTo(e.clientX,e.clientY); e.preventDefault(); } });
+  const end=()=>{ dragging=false; stage.classList.remove('dragging'); };
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+} else if(stage){
+  const t=e=>{ const p=e.touches?e.touches[0]:e; moveRoiTo(p.clientX,p.clientY); e.preventDefault(); };
+  stage.addEventListener('touchstart', e=>{ dragging=true; t(e); }, {passive:false});
+  stage.addEventListener('touchmove', e=>{ if(dragging) t(e); }, {passive:false});
+  stage.addEventListener('touchend', ()=>{ dragging=false; });
 }
 
 /* ---------- Калибровка порога шума ---------- */
