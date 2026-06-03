@@ -102,10 +102,11 @@
     <div class="motionbar" id="mbar"><i></i></div>
   </div>
 
-  <div class="field" style="margin:10px 0;">
-    <label>Размер рамки <b id="vRoi">60</b>%</label>
-    <input type="range" id="roi" min="20" max="100" step="5" value="60">
+  <div class="field" style="margin:10px 0 6px;">
+    <label>Размер рамки <b id="vRoi">40</b>%</label>
+    <input type="range" id="roi" min="15" max="100" step="5" value="40">
   </div>
+  <div class="ctlrow"><button id="findHandBtn">🎯 Найти руку</button></div>
 
   <div class="row">
     <button id="startBtn">▶ Старт</button>
@@ -313,11 +314,37 @@ function startFrameLoop(){
   if(useRVFC) video.requestVideoFrameCallback(tick); else requestAnimationFrame(tick);
 }
 
+// Центр рамки в долях RAW-кадра (по умолчанию центр). Смещается к найденной руке.
+let roiCx = parseFloat(localStorage.getItem('armRoiX')); if(isNaN(roiCx)) roiCx=0.5;
+let roiCy = parseFloat(localStorage.getItem('armRoiY')); if(isNaN(roiCy)) roiCy=0.5;
+// Поиск руки по движению. Полнокадровый разбор активен только во время поиска (~2.5с),
+// на тренировку/реакцию не влияет.
+let locating=false, locPrev=null, locSumX=0, locSumY=0, locSumW=0;
+
 function roiBounds(){
-  const f = (cfg.roi||60)/100;
+  const f = (cfg.roi||40)/100;
   const w = Math.round(PW*f), h = Math.round(PH*f);
-  const x = Math.round((PW-w)/2), y = Math.round((PH-h)/2);
+  let x = Math.round(roiCx*PW - w/2), y = Math.round(roiCy*PH - h/2);
+  x = Math.max(0, Math.min(PW-w, x));
+  y = Math.max(0, Math.min(PH-h, y));
   return {x,y,w,h};
+}
+
+// Накапливает центр движения по всему кадру (только в режиме поиска руки)
+function accumulateLocate(d){
+  const step=2, thr=22;
+  if(!locPrev){
+    locPrev=new Float32Array(PW*PH);
+    for(let j=0;j<PH;j+=step) for(let i=0;i<PW;i+=step){ const p=j*PW+i, o=p*4;
+      locPrev[p]=d[o]*0.299+d[o+1]*0.587+d[o+2]*0.114; }
+    return;
+  }
+  for(let j=0;j<PH;j+=step){ for(let i=0;i<PW;i+=step){
+    const p=j*PW+i, o=p*4;
+    const g=d[o]*0.299+d[o+1]*0.587+d[o+2]*0.114;
+    if(Math.abs(g-locPrev[p])>thr){ locSumX+=i; locSumY+=j; locSumW++; }
+    locPrev[p]=g;
+  }}
 }
 
 function processFrame(){
@@ -326,6 +353,7 @@ function processFrame(){
   let img;
   try{ img = wctx.getImageData(0,0,PW,PH); }catch(e){ return; }
   const d = img.data;
+  if(locating){ accumulateLocate(d); }
   const {x,y,w,h} = roiBounds();
   const gray = new Float32Array(PW*PH);
   let changed=0, total=0;
@@ -365,8 +393,10 @@ function drawOverlay(motion){
   if(overlay.width!==overlay.clientWidth){ overlay.width=overlay.clientWidth; overlay.height=overlay.clientHeight; }
   const W=overlay.width, H=overlay.height;
   octx.clearRect(0,0,W,H);
-  const f=(cfg.roi||60)/100;
-  const w=W*f, h=H*f, x=(W-w)/2, yb=(H-h)/2;
+  const f=(cfg.roi||40)/100;
+  const w=W*f, h=H*f;
+  let x=(1-roiCx)*W - w/2, yb=roiCy*H - h/2;   // зеркально — под отражённое видео
+  x=Math.max(0,Math.min(W-w,x)); yb=Math.max(0,Math.min(H-h,yb));
   octx.lineWidth=2; octx.strokeStyle='rgba(46,160,67,.8)';
   octx.setLineDash([8,6]); octx.strokeRect(x,yb,w,h); octx.setLineDash([]);
   // полоска движения относительно порога
@@ -389,6 +419,29 @@ calBtn.addEventListener('click', async ()=>{
   calBtn.textContent='Готово ✓';
   setTimeout(()=>calBtn.textContent='Калибровать порог',1200);
 });
+
+/* ---------- Поиск руки: ставит рамку туда, где было движение ---------- */
+const findHandBtn = document.getElementById('findHandBtn');
+async function findHand(){
+  if(!stream){ await initCamera(); if(!stream) return; }
+  locSumX=0; locSumY=0; locSumW=0; locPrev=null; locating=true;
+  if(findHandBtn) findHandBtn.disabled=true;
+  setWord('Подвигай рукой…','tip'); setStatus('Ищу руку');
+  await sleep(2500);
+  locating=false;
+  if(findHandBtn) findHandBtn.disabled=false;
+  if(locSumW>40){                                  // нашли достаточно движения
+    roiCx = Math.max(0.18, Math.min(0.82, (locSumX/locSumW)/PW));
+    roiCy = Math.max(0.18, Math.min(0.82, (locSumY/locSumW)/PH));
+    localStorage.setItem('armRoiX', roiCx.toFixed(3));
+    localStorage.setItem('armRoiY', roiCy.toFixed(3));
+    setWord('Рука найдена ✓','tip');
+  } else {
+    setWord('Движения не видно','tip');
+  }
+  setStatus('Готов');
+}
+if(findHandBtn) findHandBtn.addEventListener('click', findHand);
 
 /* ---------- Web Audio: точный сигнал «Go» ---------- */
 let audioCtx=null;
@@ -715,8 +768,11 @@ async function loop(){
 
 // Перед первым повтором — подсказка завести руку в рамку
 async function introThenLoop(){
-  setWord('👉 Помести руку в рамку','tip'); setStatus('Приготовься');
-  await sleep(3000);
+  setWord('👉 Подними руку и подвигай ею','tip'); setStatus('Поиск руки');
+  await findHand();            // определяем, какую руку подняли, и ставим рамку туда
+  if(!running) return;
+  setWord('Готовься…','tip');
+  await sleep(900);
   if(!running) return;
   setWord('','');
   loop();
