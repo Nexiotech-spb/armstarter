@@ -699,7 +699,7 @@ async function runRep(){
 
   if(type==='readyGo'){
     setStatus('Ready');                          // без надписи на экране — только звук
-    await speak('Ready', {pitch:1.0});           // сторож уже следит во время «Ready»
+    await speak('Ready', {rate:0.8, volume:0.7, pitch:1.0});           // сторож уже следит во время «Ready»
     if(!running){ watching=false; mbar.classList.remove('armed'); return; }
   } else {
     setStatus('Замри');
