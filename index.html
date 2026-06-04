@@ -671,7 +671,7 @@ function drawChart(){
   });
 }
 
-async function runRep(){
+async function runRep(myGen){
   const list = chosenTypes();
   if(!list.length){ errEl.textContent='Выбери хотя бы один тип команды.'; stopTraining(); return; }
   const type = list[Math.floor(Math.random()*list.length)];
@@ -679,7 +679,7 @@ async function runRep(){
   // 1) Пауза между повторами — встаём в позицию
   setWord('', ''); setStatus('Приготовься');
   await sleep(rnd(cfg.irMin, cfg.irMax)*1000);
-  if(!running) return;
+  if(!running || gen!==myGen) return;
 
   // 2) Окно перед Go: сторож фальстарта активен с этого момента — включая само слово «Ready»
   const holdMs = rnd(cfg.holdMin, cfg.holdMax)*1000;
@@ -687,7 +687,7 @@ async function runRep(){
 
   let falseStart=false, watching=true;
   (async ()=>{                                   // непрерывная слежка до команды GO
-    while(watching && running){
+    while(watching && running && gen===myGen){
       if(isMoving()){
         falseStart=true; watching=false;
         if('speechSynthesis' in window) speechSynthesis.cancel(); // оборвать «Ready», если дёрнулся на нём
@@ -700,17 +700,17 @@ async function runRep(){
   if(type==='readyGo'){
     setStatus('Ready');                          // без надписи на экране — только звук
     await speak('Ready', {rate:0.8, volume:0.7, pitch:1.0});           // сторож уже следит во время «Ready»
-    if(!running){ watching=false; mbar.classList.remove('armed'); return; }
+    if(!running || gen!==myGen){ watching=false; mbar.classList.remove('armed'); return; }
   } else {
     setStatus('Замри');
   }
 
   // случайная выдержка перед GO (сторож продолжает следить)
   const tHold=performance.now();
-  while(performance.now()-tHold < holdMs && !falseStart && running){ await sleep(4); }
+  while(performance.now()-tHold < holdMs && !falseStart && running && gen===myGen){ await sleep(4); }
   watching=false;
   mbar.classList.remove('armed');
-  if(!running) return;
+  if(!running || gen!==myGen) return;
   if(falseStart){
     setWord('ФАЛЬСТАРТ','false'); setStatus('Фальстарт'); recordFalse();
     speak('False start', {pitch:1.0});
@@ -729,12 +729,12 @@ async function runRep(){
     speak('Go', {rate:1.4, pitch:1.0, onStart:(t)=>{ t0=t; }}); // без надписи — только звук
   }
   // ждём t0 (момент звука) — для голоса берётся из onstart
-  while(t0===null && running){ await sleep(4); }
-  if(!running) return;
+  while(t0===null && running && gen===myGen){ await sleep(4); }
+  if(!running || gen!==myGen) return;
 
   // 4) Ждём движение руки
   const t1 = await waitMotion(2500);
-  if(!running) return;
+  if(!running || gen!==myGen) return;
   if(t1===null){
     setWord('— нет реакции','ready'); setStatus('Пропуск'); recordMiss();
     await sleep(3000);   // показ результата дольше (x2.5)
@@ -749,15 +749,15 @@ async function runRep(){
   await sleep(3000);   // показ реакции 3 сек
 }
 
-async function loop(){
-  while(running){
-    await runRep();
-    if(!running) break;
+async function loop(myGen){
+  while(running && gen===myGen){
+    await runRep(myGen);
+    if(!running || gen!==myGen) break;
   }
 }
 
 // Перед первым повтором — подсказка завести руку в рамку
-async function introThenLoop(){
+async function introThenLoop(myGen){
   // краткая инструкция после старта
   setStatus('Инструкция');
   wordEl.className='instr';
@@ -765,14 +765,15 @@ async function introThenLoop(){
                      '2. Стартуй рукой на звук команды.<br>'+
                      '3. Дёрнулся раньше — фальстарт.';
   await sleep(5000);
-  if(!running) return;
+  if(!running || gen!==myGen) return;
   setWord('👉 Рука в рамку, замри','tip'); setStatus('Приготовься');
   await sleep(1800);
-  if(!running) return;
+  if(!running || gen!==myGen) return;
   setWord('','');
-  loop();
+  loop(myGen);
 }
 
+let gen=0;   // поколение тренировки: старая асинхронная цепочка завершается при смене
 /* ---------- Старт / Стоп ---------- */
 async function startTraining(){
   errEl.textContent='';
@@ -785,12 +786,12 @@ async function startTraining(){
   reps=0; falses=0; sum=0; count=0; best=Infinity; sessionLog.length=0;
   S.last.textContent='—'; S.avg.textContent='—'; S.best.textContent='—';
   S.false.textContent='0'; S.reps.textContent='0'; drawChart();
-  running=true; startBtn.disabled=true; stopBtn.disabled=false;
+  running=true; const myGen=++gen; startBtn.disabled=true; stopBtn.disabled=false;
   setStatus('Старт');
-  introThenLoop();
+  introThenLoop(myGen);
 }
 function stopTraining(){
-  running=false; testing=false; startBtn.disabled=false; stopBtn.disabled=true;
+  running=false; testing=false; gen++; startBtn.disabled=false; stopBtn.disabled=true;
   mbar.classList.remove('armed');
   if('speechSynthesis' in window) speechSynthesis.cancel();
   setWord('',''); setStatus('Стоп');
